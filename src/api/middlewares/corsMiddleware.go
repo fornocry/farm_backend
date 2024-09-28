@@ -7,7 +7,7 @@ import (
 
 func (u MiddlewareServiceImpl) CorsMiddleware() gin.HandlerFunc {
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:5173", "https://ferma.fds54fsd43.store"}
+	config.AllowOrigins = []string{"http://localhost:5173", "https://front.gentelmanclub.pro"}
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	return cors.New(config)
 }
