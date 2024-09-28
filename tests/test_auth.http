@@ -1,0 +1,13 @@
+GET http://localhost:8001/api/v1/user/auth?method=telegram&data=query_id%3DAAHdF6IQAAAAAN0XohDhrOrc%26user%3D%257B%2522id%2522%253A279058397%252C%2522first_name%2522%253A%2522Vladislav%2522%252C%2522last_name%2522%253A%2522Kibenko%2522%252C%2522username%2522%253A%2522vdkfrost%2522%252C%2522language_code%2522%253A%2522ru%2522%252C%2522is_premium%2522%253Atrue%257D%26auth_date%3D1662771648%26hash%3Dc501b71e775f74ce10e377dea85a7ea24ecd640b223ea86dfe453e0eaed2e2b2
+Accept: application/json
+
+
+### Resp example
+#{
+#  "user": {
+#    "id": "e7a7aa71-e74e-42f5-96d9-9bd4abfb7d32",
+#    "first_name": "test_first_name",
+#    "last_name": "test_last_name"
+#  },
+#  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MjYwODAwODUsInVzZXJfaWQiOiJlN2E3YWE3MS1lNzRlLTQyZjUtOTZkOS05YmQ0YWJmYjdkMzIifQ.Ic_-8OVnFa6dBq9l2eZXnFVc06vh4bnh4KFsSE3gK3E"
+#}

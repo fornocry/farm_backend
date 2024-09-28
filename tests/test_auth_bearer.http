@@ -1,0 +1,17 @@
+GET http://localhost:8001/api/v1/inventory
+Accept: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Mjc0NTI1OTUsInVzZXJfaWQiOiI3YjU0MjY3Ni1kODI0LTQ3NjYtYjJjNi0yZTZmODE5NGVlZWQifQ.yOn8FAVvtBeIiR627MUFPDGFuS2lNWcgTF0F4WBLmhE
+
+### Rest example
+#{
+#  "items": [
+#    {
+#      "plant": "ROSE",
+#      "quantity": 0
+#    },
+#    {
+#      "plant": "POTATO",
+#      "quantity": 5
+#    }
+#  ]
+#}
