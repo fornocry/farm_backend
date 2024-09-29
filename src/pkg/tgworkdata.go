@@ -3,6 +3,7 @@ package pkg
 import (
 	"encoding/base64"
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"strings"
 )
@@ -25,7 +26,8 @@ func DecodeStartParam(param string) TelegramStart {
 		return TelegramStart{"", ""}
 	}
 	paramDecodedString := string(paramDecoded)
-	paramCode := strings.SplitN(paramDecodedString, "|", 1)
+	paramCode := strings.SplitN(paramDecodedString, "|", 2)
+	log.Infoln(paramCode)
 	if len(paramCode) != 2 {
 		return TelegramStart{"", ""}
 	}

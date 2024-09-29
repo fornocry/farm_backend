@@ -143,11 +143,12 @@ func (u UserRepositoryImpl) GetOrCreateAuth(
 	userAuth, err := u.GetByAuthObj(data, method)
 	if err != nil {
 		log.Infoln("Creating user with auth method ", method, " and data ", data)
-		_, err := u.Create(data, method)
+		user, err := u.Create(data, method)
 		if err != nil {
+			log.Infoln("Error on creatin user: ", err)
 			return dao.UserAuth{}, false, err
 		}
-		return userAuth, true, nil
+		return dao.UserAuth{User: user}, true, nil
 	}
 	return userAuth, false, nil
 }
@@ -204,7 +205,7 @@ func (u UserRepositoryImpl) SetReferrals(userId uuid.UUID, referrerId uuid.UUID)
 	}
 	err := u.db.Save(&userReferrals).Error
 	if err != nil {
-		log.Error("Got an error when creating user. Error: ", err)
+		log.Error("Got an error when creating user ref. Error: ", err)
 		return dao.UserReferral{}
 	}
 	return userReferrals
