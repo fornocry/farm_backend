@@ -22,11 +22,12 @@ type UserRepository interface {
 		method string) (dao.User, error)
 	GetOrCreateAuth(
 		data string,
-		method string) (dao.UserAuth, error)
+		method string) (dao.UserAuth, bool, error)
 	UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error)
 	GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, error)
 	GetMyFields(userId uuid.UUID) ([]dao.UserField, error)
 	GetMyReferrals(userId uuid.UUID) ([]dao.User, error)
+	SetReferrals(userId uuid.UUID, referrerId uuid.UUID) dao.UserReferral
 }
 
 type UserRepositoryImpl struct {
@@ -138,16 +139,17 @@ func (u UserRepositoryImpl) GetOrCreate(
 }
 func (u UserRepositoryImpl) GetOrCreateAuth(
 	data string,
-	method string) (dao.UserAuth, error) {
+	method string) (dao.UserAuth, bool, error) {
 	userAuth, err := u.GetByAuthObj(data, method)
 	if err != nil {
 		log.Infoln("Creating user with auth method ", method, " and data ", data)
 		_, err := u.Create(data, method)
 		if err != nil {
-			return dao.UserAuth{}, err
+			return dao.UserAuth{}, false, err
 		}
+		return userAuth, true, nil
 	}
-	return userAuth, nil
+	return userAuth, false, nil
 }
 
 func (u UserRepositoryImpl) UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error) {
@@ -193,6 +195,19 @@ func (u UserRepositoryImpl) GetMyReferrals(userId uuid.UUID) ([]dao.User, error)
 		userReferralsAsUser = append(userReferralsAsUser, referral.Referral)
 	}
 	return userReferralsAsUser, nil
+}
+
+func (u UserRepositoryImpl) SetReferrals(userId uuid.UUID, referrerId uuid.UUID) dao.UserReferral {
+	userReferrals := dao.UserReferral{
+		ReferralId: userId,
+		ReferrerID: referrerId,
+	}
+	err := u.db.Save(&userReferrals).Error
+	if err != nil {
+		log.Error("Got an error when creating user. Error: ", err)
+		return dao.UserReferral{}
+	}
+	return userReferrals
 }
 
 func UserRepositoryInit(db *gorm.DB) *UserRepositoryImpl {

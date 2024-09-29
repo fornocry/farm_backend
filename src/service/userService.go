@@ -7,6 +7,7 @@ import (
 	"crazyfarmbackend/src/pkg"
 	"crazyfarmbackend/src/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"strconv"
@@ -93,7 +94,7 @@ func (u UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) 
 		pkg.PanicException(constant.Unauthorized, "")
 	}
 	telegramUserIDStr := strconv.FormatInt(telegramInitData.TelegramUser.ID, 10)
-	userAuth, err := u.userRepository.GetOrCreateAuth(telegramUserIDStr, constant.Telegram)
+	userAuth, isFirst, err := u.userRepository.GetOrCreateAuth(telegramUserIDStr, constant.Telegram)
 	if err != nil {
 		log.Error("GetByAuth from database error: ", err)
 		pkg.PanicException(constant.DataNotFound, "")
@@ -107,8 +108,19 @@ func (u UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) 
 		"icon":          pkg.GetNullableString(telegramInitData.TelegramUser.PhotoURL),
 		"language_code": pkg.GetNullableString(telegramInitData.TelegramUser.LanguageCode),
 	}
+	_, err = u.userRepository.UpdateUserFields(user.ID, updates)
 
-	user, err = u.userRepository.UpdateUserFields(user.ID, updates)
+	// referral program todo optimize
+	if isFirst {
+		decodedParam := pkg.DecodeStartParam(telegramInitData.StartParam)
+		if decodedParam.Method == "ref" {
+			referrerId, err := uuid.Parse(decodedParam.Data)
+			if err == nil {
+				u.userRepository.SetReferrals(user.ID, referrerId)
+			}
+		}
+	}
+
 	if err != nil {
 		log.Error("Updating data: ", err)
 		pkg.PanicException(constant.UnknownError, "")

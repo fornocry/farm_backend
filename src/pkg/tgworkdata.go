@@ -8,8 +8,8 @@ import (
 )
 
 type TelegramStart struct {
-	method string
-	data   string
+	Method string
+	Data   string
 }
 
 func ConstructReferralLink(userId uuid.UUID) string {
