@@ -3,6 +3,7 @@ package pkg
 import (
 	"encoding/base64"
 	"github.com/google/uuid"
+	"os"
 	"strings"
 )
 
@@ -14,7 +15,8 @@ type TelegramStart struct {
 func ConstructReferralLink(userId uuid.UUID) string {
 	linkConstruct := "ref|" + userId.String()
 	linkEncoded := base64.StdEncoding.EncodeToString([]byte(linkConstruct))
-	return linkEncoded
+	linkBuild := os.Getenv("TELEGRAM_BOT_LINK") + "?startapp=" + linkEncoded
+	return linkBuild
 }
 
 func DecodeStartParam(param string) TelegramStart {
