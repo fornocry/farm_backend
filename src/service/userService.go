@@ -108,14 +108,10 @@ func (u UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) 
 		"icon":          pkg.GetNullableString(telegramInitData.TelegramUser.PhotoURL),
 		"language_code": pkg.GetNullableString(telegramInitData.TelegramUser.LanguageCode),
 	}
-	_, err = u.userRepository.UpdateUserFields(user.ID, updates)
-	log.Infoln("SEX1")
-	log.Infoln(user.ID)
-	log.Infoln(telegramInitData.StartParam)
+	user, err = u.userRepository.UpdateUserFields(user.ID, updates)
 	// referral program todo optimize
 	if isFirst {
 		decodedParam := pkg.DecodeStartParam(telegramInitData.StartParam)
-		log.Infoln(decodedParam)
 		if decodedParam.Method == "ref" {
 			referrerId, err := uuid.Parse(decodedParam.Data)
 			if err == nil {
