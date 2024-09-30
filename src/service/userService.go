@@ -4,6 +4,7 @@ import (
 	"crazyfarmbackend/src/constant"
 	"crazyfarmbackend/src/domain/dao"
 	"crazyfarmbackend/src/domain/dto"
+	"crazyfarmbackend/src/domain/dtob"
 	"crazyfarmbackend/src/pkg"
 	"crazyfarmbackend/src/repository"
 	"github.com/gin-gonic/gin"
@@ -26,79 +27,62 @@ type UserServiceImpl struct {
 	userRepository repository.UserRepository
 }
 
-func constructUserByModel(user dao.User) dto.User {
-	return dto.User{ID: user.ID,
-		FirstName:    user.FirstName,
-		LastName:     user.LastName,
-		ReferralLink: pkg.ConstructReferralLink(user.ID),
-		Icon:         user.Icon,
-		LanguageCode: user.LanguageCode,
-	}
-}
-func constructUserUpgradeByModel(userUpgrade dao.UserUpgrade) dto.UserUpgrade {
-	return dto.UserUpgrade{
-		FarmLvl:   userUpgrade.FarmLvl,
-		MaxFields: constant.GetLvlMaxFields(userUpgrade.FarmLvl),
-	}
-}
-func constructUserFieldByModel(userField dao.UserField) dto.UserField {
-	return dto.UserField{
-		FieldID: userField.FieldID,
-		Plant:   userField.Plant,
-	}
+func (u *UserServiceImpl) logAndReturnError(context string, err error) {
+	log.Error(context, err)
+	pkg.PanicException(constant.UnknownError, "")
 }
 
-func constructUserReferralByModel(user dao.User) dto.UserReferral {
-	return dto.UserReferral{ID: user.ID,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-		Username:  user.Username,
-		Icon:      user.Icon,
-	}
-}
-
-func (u UserServiceImpl) AuthUser(c *gin.Context) (dto.UserAuthResponse, error) {
+func (u *UserServiceImpl) AuthUser(c *gin.Context) (dto.UserAuthResponse, error) {
 	method := c.Query("method")
 	data := c.Query("data")
+
 	if method == "" || data == "" {
 		pkg.PanicException(constant.WrongBody, "")
 	}
+
 	var user dto.User
 	var userAuth dao.UserAuth
+
 	switch method {
 	case "telegram":
 		user, userAuth = u.AuthUserTelegram(data)
 	default:
 		pkg.PanicException(constant.WrongMethod, "")
 	}
+
 	token, err := pkg.CreateJwtToken(userAuth.ID)
 	if err != nil {
-		pkg.PanicException(constant.UnknownError, "")
+		u.logAndReturnError("Creating JWT token failed: ", err)
 	}
+
 	return dto.UserAuthResponse{
 		User:  user,
 		Token: token,
 	}, nil
 }
 
-func (u UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) {
+func (u *UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) {
 	telegramToken := os.Getenv("TELEGRAM_TOKEN")
 	telegramInitDataTtl, err := strconv.ParseFloat(os.Getenv("TELEGRAM_INIT_DATA_TTL"), 64)
+	if err != nil {
+		u.logAndReturnError("Parsing TELEGRAM_INIT_DATA_TTL failed: ", err)
+	}
+
 	telegramInitData, err := pkg.ParseTelegramData(data)
 	if err != nil {
-		log.Error("Initdata parse: ", err)
-		pkg.PanicException(constant.InvalidRequest, "")
+		u.logAndReturnError("Initdata parse: ", err)
 	}
+
 	if err := pkg.ValidateTelegramData(data, telegramToken, time.Duration(telegramInitDataTtl*float64(time.Second))); err != nil {
-		log.Error("Validating initdata: ", err)
-		pkg.PanicException(constant.Unauthorized, "")
+		u.logAndReturnError("Validating initdata: ", err)
 	}
+
 	telegramUserIDStr := strconv.FormatInt(telegramInitData.TelegramUser.ID, 10)
 	userAuth, isFirst, err := u.userRepository.GetOrCreateAuth(telegramUserIDStr, constant.Telegram)
 	if err != nil {
-		log.Error("GetByAuth from database error: ", err)
-		pkg.PanicException(constant.DataNotFound, "")
+		u.logAndReturnError("GetByAuth from database error: ", err)
 	}
+
 	user := userAuth.User
 	updates := map[string]interface{}{
 		"tg_id":         telegramInitData.TelegramUser.ID,
@@ -108,80 +92,82 @@ func (u UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth) 
 		"icon":          pkg.GetNullableString(telegramInitData.TelegramUser.PhotoURL),
 		"language_code": pkg.GetNullableString(telegramInitData.TelegramUser.LanguageCode),
 	}
+
 	user, err = u.userRepository.UpdateUserFields(user.ID, updates)
-	// referral program todo optimize
+	if err != nil {
+		u.logAndReturnError("Updating data: ", err)
+	}
+
 	if isFirst {
-		decodedParam := pkg.DecodeStartParam(telegramInitData.StartParam)
-		if decodedParam.Method == "ref" {
-			referrerId, err := uuid.Parse(decodedParam.Data)
-			if err == nil {
-				u.userRepository.SetReferrals(user.ID, referrerId)
-			}
+		u.handleReferral(telegramInitData.StartParam, user.ID)
+	}
+	return dtob.ConstructUserFromModel(user), userAuth
+}
+
+func (u *UserServiceImpl) handleReferral(startParam string, userID uuid.UUID) {
+	decodedParam := pkg.DecodeStartParam(startParam)
+	if decodedParam.Method == "ref" {
+		referrerId, err := uuid.Parse(decodedParam.Data)
+		if err == nil {
+			_, _ = u.userRepository.SetReferrals(userID, referrerId)
 		}
 	}
-
-	if err != nil {
-		log.Error("Updating data: ", err)
-		pkg.PanicException(constant.UnknownError, "")
-	}
-	return constructUserByModel(user), userAuth
 }
 
-func (u UserServiceImpl) GetMe(c *gin.Context) dto.User {
+func (u *UserServiceImpl) GetMe(c *gin.Context) dto.User {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
-	return constructUserByModel(user)
+	return dtob.ConstructUserFromModel(user)
 }
 
-func (u UserServiceImpl) GetUserUpgrade(c *gin.Context) dto.UserUpgrade {
+func (u *UserServiceImpl) GetUserUpgrade(c *gin.Context) dto.UserUpgrade {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
+
 	userUpgrade, err := u.userRepository.GetUserUpgrade(user.ID)
 	if err != nil {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
-	return constructUserUpgradeByModel(userUpgrade)
+	return dtob.ConstructUserUpgradeFromModel(userUpgrade)
 }
 
-func (u UserServiceImpl) GetMyFields(c *gin.Context) []dto.UserField {
+func (u *UserServiceImpl) GetMyFields(c *gin.Context) []dto.UserField {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
+
 	userFields, err := u.userRepository.GetMyFields(user.ID)
 	if err != nil {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
-	if len(userFields) == 0 {
-		return []dto.UserField{}
-	}
-	var userFieldDTOs []dto.UserField
-	for _, field := range userFields {
-		userFieldDTOs = append(userFieldDTOs, constructUserFieldByModel(field))
+
+	userFieldDTOs := make([]dto.UserField, len(userFields))
+	for i, field := range userFields {
+		userFieldDTOs[i] = dtob.ConstructUserFieldFromModel(field)
 	}
 
 	return userFieldDTOs
 }
 
-func (u UserServiceImpl) GetMyReferrals(c *gin.Context) []dto.UserReferral {
+func (u *UserServiceImpl) GetMyReferrals(c *gin.Context) []dto.UserReferral {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
+
 	userReferrals, err := u.userRepository.GetMyReferrals(user.ID)
 	if err != nil {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
-	if len(userReferrals) == 0 {
-		return []dto.UserReferral{}
-	}
-	var userReferralsDTOs []dto.UserReferral
-	for _, referral := range userReferrals {
-		userReferralsDTOs = append(userReferralsDTOs, constructUserReferralByModel(referral))
+
+	userReferralsDTOs := make([]dto.UserReferral, len(userReferrals))
+	for i, referral := range userReferrals {
+		userReferralsDTOs[i] = dtob.ConstructUserReferralFromModel(referral)
 	}
 
 	return userReferralsDTOs

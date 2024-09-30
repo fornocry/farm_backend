@@ -22,6 +22,16 @@ type TaskServiceImpl struct {
 	inventoryRepository repository.InventoryRepository
 }
 
+// Helper function to extract user from context
+func (s *TaskServiceImpl) getUserFromContext(c *gin.Context) (dao.User, error) {
+	user, ok := c.MustGet("user").(dao.User)
+	if !ok {
+		return dao.User{}, fmt.Errorf("failed to get user from context")
+	}
+	return user, nil
+}
+
+// Helper function to construct a DTO from a model and status
 func constructTaskByModel(item dao.Task, status constant.TaskCompleteStatus) dto.Task {
 	return dto.Task{
 		ID:            item.ID,
@@ -36,94 +46,103 @@ func constructTaskByModel(item dao.Task, status constant.TaskCompleteStatus) dto
 	}
 }
 
+// Helper function to convert status to string
 func statusToString(status dao.TaskComplete, err error) constant.TaskCompleteStatus {
-	var statusStr constant.TaskCompleteStatus
 	if err != nil {
-		statusStr = constant.TASK_COMPLETE_NULL
-	} else {
-		statusStr = status.Status
+		return constant.TASK_COMPLETE_NULL
 	}
-	return statusStr
+	return status.Status
 }
 
-func (u TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
-	user, ok := c.MustGet("user").(dao.User)
-	if !ok {
-		return dto.Task{}, fmt.Errorf("failed to get user from context")
+func (s *TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
+	user, err := s.getUserFromContext(c)
+	if err != nil {
+		return dto.Task{}, err
 	}
 	taskId := c.Query("taskId")
 	if taskId == "" {
 		pkg.PanicException(constant.WrongBody, "")
 	}
+
 	taskIdUUid, err := uuid.Parse(taskId)
-	task, err := u.taskRepository.Get(taskIdUUid)
 	if err != nil {
-		fmt.Printf("Error parsing UUID: %v\n", err)
-		return dto.Task{}, fmt.Errorf("failed to get user from context")
+		return dto.Task{}, fmt.Errorf("invalid task ID format: %v", err)
 	}
-
-	status, statusErr := u.taskRepository.GetStatus(user.ID, task.ID)
+	task, err := s.taskRepository.Get(taskIdUUid)
+	if err != nil {
+		return dto.Task{}, fmt.Errorf("failed to get task: %v", err)
+	}
+	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if statusErr == nil {
-		return constructTaskByModel(task, statusToString(status, statusErr)), nil
+		return constructTaskByModel(task, statusToString(status, nil)), nil
 	}
-	checked, err := u.taskRepository.CheckTask(task, user)
-	if !checked {
-		if err != nil {
-			pkg.PanicException(constant.WrongBody, "")
-		}
+	checked, err := s.taskRepository.CheckTask(task, user)
+	if err != nil || !checked {
 		return constructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
-	status, statusErr = u.taskRepository.MarkDone(user.ID, taskIdUUid)
+	status, statusErr = s.taskRepository.MarkDone(user.ID, taskIdUUid)
 	return constructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
-func (u TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
-	user, ok := c.MustGet("user").(dao.User)
-	if !ok {
-		return dto.Task{}, fmt.Errorf("failed to get user from context")
+func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
+	user, err := s.getUserFromContext(c)
+	if err != nil {
+		return dto.Task{}, err
 	}
+
 	taskId := c.Query("taskId")
 	if taskId == "" {
 		pkg.PanicException(constant.WrongBody, "")
 	}
+
 	taskIdUUid, err := uuid.Parse(taskId)
-	task, err := u.taskRepository.Get(taskIdUUid)
 	if err != nil {
-		fmt.Printf("Error parsing UUID: %v\n", err)
-		return dto.Task{}, fmt.Errorf("failed to get user from context")
+		return dto.Task{}, fmt.Errorf("invalid task ID format: %v", err)
 	}
-	status, statusErr := u.taskRepository.GetStatus(user.ID, task.ID)
+
+	task, err := s.taskRepository.Get(taskIdUUid)
+	if err != nil {
+		return dto.Task{}, fmt.Errorf("failed to get task: %v", err)
+	}
+
+	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if status.Status == constant.TASK_COMPLETE_FINISHED {
 		return constructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
-	checked, err := u.taskRepository.CheckTask(task, user)
-	if !checked {
-		if err != nil {
-			pkg.PanicException(constant.WrongBody, "")
-		}
+
+	checked, err := s.taskRepository.CheckTask(task, user)
+	if err != nil || !checked {
 		return constructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
-	status, statusErr = u.taskRepository.MarkClaimed(user.ID, taskIdUUid)
-	err = u.inventoryRepository.IncreaseItemQuantity(user.ID, task.Reward, task.RewardAmount)
-	if err != nil {
-		return dto.Task{}, fmt.Errorf("failed to give money for task")
+
+	status, statusErr = s.taskRepository.MarkClaimed(user.ID, taskIdUUid)
+	if statusErr != nil {
+		return dto.Task{}, fmt.Errorf("failed to mark task as claimed: %v", statusErr)
 	}
+
+	err = s.inventoryRepository.IncreaseItemQuantity(user.ID, task.Reward, task.RewardAmount)
+	if err != nil {
+		return dto.Task{}, fmt.Errorf("failed to give reward for task: %v", err)
+	}
+
 	return constructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
-func (u TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
-	user, ok := c.MustGet("user").(dao.User)
-	if !ok {
-		return []dto.Task{}, fmt.Errorf("failed to get user from context")
-	}
-	items, err := u.taskRepository.GetAllTasks()
+func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
+	user, err := s.getUserFromContext(c)
 	if err != nil {
-		return []dto.Task{}, err
+		return nil, err
 	}
+
+	items, err := s.taskRepository.GetAllTasks()
+	if err != nil {
+		return nil, err
+	}
+
 	var dtoItems []dto.Task
 	for _, item := range items {
-		status, err := u.taskRepository.GetStatus(user.ID, item.ID)
+		status, err := s.taskRepository.GetStatus(user.ID, item.ID)
 		dtoItems = append(dtoItems, constructTaskByModel(item, statusToString(status, err)))
 	}
 

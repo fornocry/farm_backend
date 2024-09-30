@@ -10,210 +10,152 @@ import (
 type UserRepository interface {
 	Save(user *dao.User) (dao.User, error)
 	Get(userId uuid.UUID) (dao.User, error)
-	GetByAuth(data string,
-		method string) (dao.User, error)
-	GetByAuthObj(
-		data string,
-		method string) (dao.UserAuth, error)
+	GetByAuth(data, method string) (dao.User, error)
+	GetByAuthObj(data, method string) (dao.UserAuth, error)
 	GetByAuthId(ID uuid.UUID) (dao.UserAuth, error)
-	Create(data string,
-		method string) (dao.User, error)
-	GetOrCreate(data string,
-		method string) (dao.User, error)
-	GetOrCreateAuth(
-		data string,
-		method string) (dao.UserAuth, bool, error)
+	Create(data, method string) (dao.User, error)
+	GetOrCreate(data, method string) (dao.User, error)
+	GetOrCreateAuth(data, method string) (dao.UserAuth, bool, error)
 	UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error)
 	GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, error)
 	GetMyFields(userId uuid.UUID) ([]dao.UserField, error)
 	GetMyReferrals(userId uuid.UUID) ([]dao.User, error)
-	SetReferrals(userId uuid.UUID, referrerId uuid.UUID) dao.UserReferral
+	SetReferrals(userId, referrerId uuid.UUID) (dao.UserReferral, error)
 }
 
 type UserRepositoryImpl struct {
 	db *gorm.DB
 }
 
-func (u UserRepositoryImpl) Save(user *dao.User) (dao.User, error) {
-	var err = u.db.Save(user).Error
-	if err != nil {
-		log.Error("Got an error when save user. Error: ", err)
-		return dao.User{}, err
+func (u *UserRepositoryImpl) logAndReturnError(message string, err error) error {
+	log.Error(message, err)
+	return err
+}
+
+func (u *UserRepositoryImpl) Save(user *dao.User) (dao.User, error) {
+	if err := u.db.Save(user).Error; err != nil {
+		return dao.User{}, u.logAndReturnError("Error saving user: ", err)
 	}
 	return *user, nil
 }
 
-func (u UserRepositoryImpl) Get(
-	userId uuid.UUID) (dao.User, error) {
-
-	user := dao.User{
-		ID: userId,
-	}
-	var err = u.db.Where(&user).First(&user).Error
-	if err != nil {
-		log.Error("Got an error when get user. Error: ", err)
-		return dao.User{}, err
+func (u *UserRepositoryImpl) Get(userId uuid.UUID) (dao.User, error) {
+	var user dao.User
+	if err := u.db.First(&user, userId).Error; err != nil {
+		return dao.User{}, u.logAndReturnError("Error getting user: ", err)
 	}
 	return user, nil
 }
 
-func (u UserRepositoryImpl) GetByAuth(
-	data string,
-	method string) (dao.User, error) {
-
-	authMethod := dao.UserAuth{
-		AuthData:   data,
-		AuthMethod: method,
+func (u *UserRepositoryImpl) getByAuthCommon(authMethod dao.UserAuth) (dao.UserAuth, error) {
+	if err := u.db.Where(&authMethod).Preload("User").First(&authMethod).Error; err != nil {
+		return dao.UserAuth{}, u.logAndReturnError("Error getting user by auth: ", err)
 	}
-	var err = u.db.Where(&authMethod).Preload("User").First(&authMethod).Error
+	return authMethod, nil
+}
+
+func (u *UserRepositoryImpl) GetByAuth(data, method string) (dao.User, error) {
+	authMethod := dao.UserAuth{AuthData: data, AuthMethod: method}
+	auth, err := u.getByAuthCommon(authMethod)
 	if err != nil {
-		log.Error("Got an error when get user. Error: ", err)
 		return dao.User{}, err
 	}
-	user := authMethod.User
-	return user, nil
-}
-func (u UserRepositoryImpl) GetByAuthObj(
-	data string,
-	method string) (dao.UserAuth, error) {
-
-	authMethod := dao.UserAuth{
-		AuthData:   data,
-		AuthMethod: method,
-	}
-	var err = u.db.Where(&authMethod).Preload("User").First(&authMethod).Error
-	if err != nil {
-		log.Error("Got an error when get user. Error: ", err)
-		return dao.UserAuth{}, err
-	}
-	return authMethod, nil
+	return auth.User, nil
 }
 
-func (u UserRepositoryImpl) GetByAuthId(ID uuid.UUID) (dao.UserAuth, error) {
-
-	authMethod := dao.UserAuth{
-		ID: ID,
-	}
-	var err = u.db.Where(&authMethod).Preload("User").First(&authMethod).Error
-	if err != nil {
-		log.Error("Got an error when get user. Error: ", err)
-		return dao.UserAuth{}, err
-	}
-	return authMethod, nil
+func (u *UserRepositoryImpl) GetByAuthObj(data, method string) (dao.UserAuth, error) {
+	authMethod := dao.UserAuth{AuthData: data, AuthMethod: method}
+	return u.getByAuthCommon(authMethod)
 }
 
-func (u UserRepositoryImpl) Create(
-	data string,
-	method string) (dao.User, error) {
+func (u *UserRepositoryImpl) GetByAuthId(ID uuid.UUID) (dao.UserAuth, error) {
+	authMethod := dao.UserAuth{ID: ID}
+	return u.getByAuthCommon(authMethod)
+}
+
+func (u *UserRepositoryImpl) Create(data, method string) (dao.User, error) {
 	user := dao.User{}
-	user, err := u.Save(&user)
-	if err != nil {
-		log.Error("Got an error when creating user. Error: ", err)
+	if _, err := u.Save(&user); err != nil {
 		return dao.User{}, err
 	}
-	authMethod := dao.UserAuth{
-		AuthData:   data,
-		AuthMethod: method,
-		User:       user,
-	}
-	err = u.db.Save(&authMethod).Error
-	if err != nil {
-		log.Error("Got an error when creating user. Error: ", err)
-		return dao.User{}, err
+	authMethod := dao.UserAuth{AuthData: data, AuthMethod: method, User: user}
+	if err := u.db.Save(&authMethod).Error; err != nil {
+		return dao.User{}, u.logAndReturnError("Error creating user: ", err)
 	}
 	return user, nil
 }
 
-func (u UserRepositoryImpl) GetOrCreate(
-	data string,
-	method string) (dao.User, error) {
+func (u *UserRepositoryImpl) GetOrCreate(data, method string) (dao.User, error) {
 	user, err := u.GetByAuth(data, method)
-	if err != nil {
-		log.Infoln("Creating user with auth method ", method, " and data ", data)
-		user, err = u.Create(data, method)
-		if err != nil {
-			return dao.User{}, err
-		}
+	if err == nil {
+		return user, nil
 	}
-	return user, nil
+	log.Infof("Creating user with auth method %s and data %s", method, data)
+	return u.Create(data, method)
 }
-func (u UserRepositoryImpl) GetOrCreateAuth(
-	data string,
-	method string) (dao.UserAuth, bool, error) {
+
+func (u *UserRepositoryImpl) GetOrCreateAuth(data, method string) (dao.UserAuth, bool, error) {
 	userAuth, err := u.GetByAuthObj(data, method)
-	if err != nil {
-		log.Infoln("Creating user with auth method ", method, " and data ", data)
-		user, err := u.Create(data, method)
-		if err != nil {
-			log.Infoln("Error on creatin user: ", err)
-			return dao.UserAuth{}, false, err
-		}
-		return dao.UserAuth{User: user}, true, nil
+	if err == nil {
+		return userAuth, false, nil
 	}
-	return userAuth, false, nil
+	log.Infof("Creating user with auth method %s and data %s", method, data)
+	user, err := u.Create(data, method)
+	if err != nil {
+		return dao.UserAuth{}, false, u.logAndReturnError("Error creating user: ", err)
+	}
+	return dao.UserAuth{User: user}, true, nil
 }
 
-func (u UserRepositoryImpl) UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error) {
-	user := dao.User{
-		ID: userId,
-	}
+func (u *UserRepositoryImpl) UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error) {
+	user := dao.User{ID: userId}
 	if err := u.db.Model(&user).Updates(updates).Error; err != nil {
-		return dao.User{}, err
+		return dao.User{}, u.logAndReturnError("Error updating user fields: ", err)
 	}
 	return user, nil
 }
 
-func (u UserRepositoryImpl) GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, error) {
+func (u *UserRepositoryImpl) GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, error) {
 	var userUpgrade dao.UserUpgrade
 	if err := u.db.Where("user_id = ?", userId).First(&userUpgrade).Error; err == nil {
 		return userUpgrade, nil
 	}
-	userUpgrade = dao.UserUpgrade{
-		UserID:  userId,
-		FarmLvl: 1,
-	}
+	userUpgrade = dao.UserUpgrade{UserID: userId, FarmLvl: 1}
 	if err := u.db.Create(&userUpgrade).Error; err != nil {
-		return dao.UserUpgrade{}, err
+		return dao.UserUpgrade{}, u.logAndReturnError("Error creating user upgrade: ", err)
 	}
 	return userUpgrade, nil
 }
 
-func (u UserRepositoryImpl) GetMyFields(userId uuid.UUID) ([]dao.UserField, error) {
+func (u *UserRepositoryImpl) GetMyFields(userId uuid.UUID) ([]dao.UserField, error) {
 	var userFields []dao.UserField
 	if err := u.db.Where("user_id = ?", userId).Find(&userFields).Error; err != nil {
-		return nil, err
+		return nil, u.logAndReturnError("Error getting user fields: ", err)
 	}
 	return userFields, nil
 }
 
-func (u UserRepositoryImpl) GetMyReferrals(userId uuid.UUID) ([]dao.User, error) {
+func (u *UserRepositoryImpl) GetMyReferrals(userId uuid.UUID) ([]dao.User, error) {
 	var userReferrals []dao.UserReferral
 	if err := u.db.Where("referrer_id = ?", userId).Preload("Referral").Find(&userReferrals).Error; err != nil {
-		return nil, err
+		return nil, u.logAndReturnError("Error getting user referrals: ", err)
 	}
-	var userReferralsAsUser []dao.User
+	var referrals []dao.User
 	for _, referral := range userReferrals {
-		userReferralsAsUser = append(userReferralsAsUser, referral.Referral)
+		referrals = append(referrals, referral.Referral)
 	}
-	return userReferralsAsUser, nil
+	return referrals, nil
 }
 
-func (u UserRepositoryImpl) SetReferrals(userId uuid.UUID, referrerId uuid.UUID) dao.UserReferral {
-	userReferrals := dao.UserReferral{
-		ReferralId: userId,
-		ReferrerID: referrerId,
+func (u *UserRepositoryImpl) SetReferrals(userId, referrerId uuid.UUID) (dao.UserReferral, error) {
+	userReferral := dao.UserReferral{ReferralId: userId, ReferrerID: referrerId}
+	if err := u.db.Save(&userReferral).Error; err != nil {
+		return dao.UserReferral{}, u.logAndReturnError("Error creating user referral: ", err)
 	}
-	err := u.db.Save(&userReferrals).Error
-	if err != nil {
-		log.Error("Got an error when creating user ref. Error: ", err)
-		return dao.UserReferral{}
-	}
-	return userReferrals
+	return userReferral, nil
 }
 
 func UserRepositoryInit(db *gorm.DB) *UserRepositoryImpl {
 	_ = db.AutoMigrate(&dao.User{}, &dao.UserAuth{}, &dao.UserUpgrade{}, &dao.UserField{}, &dao.UserReferral{})
-	return &UserRepositoryImpl{
-		db: db,
-	}
+	return &UserRepositoryImpl{db: db}
 }
