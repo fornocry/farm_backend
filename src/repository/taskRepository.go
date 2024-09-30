@@ -8,8 +8,6 @@ import (
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"strconv"
-	"time"
 )
 
 type TaskRepository interface {
@@ -19,8 +17,6 @@ type TaskRepository interface {
 	GetStatus(userId uuid.UUID, taskId uuid.UUID) (dao.TaskComplete, error)
 	MarkDone(userId uuid.UUID, taskId uuid.UUID) (dao.TaskComplete, error)
 	MarkClaimed(userId uuid.UUID, taskId uuid.UUID) (dao.TaskComplete, error)
-	CheckTask(task dao.Task, user dao.User) (bool, error)
-	CheckTaskSubscribe(userId string, channelId string) (bool, error)
 }
 
 type TaskRepositoryImpl struct {
@@ -30,28 +26,6 @@ type TaskRepositoryImpl struct {
 
 func (r *TaskRepositoryImpl) logError(message string, err error) {
 	log.Error(message, err)
-}
-
-func (r *TaskRepositoryImpl) CheckTask(task dao.Task, user dao.User) (bool, error) {
-	switch task.Type {
-	case constant.SUBSCRIBE:
-		channelId, _ := task.Data["id"].(string)
-		return r.CheckTaskSubscribe(strconv.Itoa(int(user.TgId)), channelId)
-	case constant.FRIENDS:
-		return false, nil
-	default:
-		return false, nil
-	}
-}
-
-func (r *TaskRepositoryImpl) CheckTaskSubscribe(userId string, channelId string) (bool, error) {
-	requestData := userId + "," + channelId
-	msg, err := r.nc.Request("check_subscribe", []byte(requestData), 10*time.Second)
-	if err != nil {
-		r.logError("Error checking subscription: ", err)
-		return false, err
-	}
-	return string(msg.Data) == "1", nil
 }
 
 func (r *TaskRepositoryImpl) Save(task *dao.TaskComplete) (dao.TaskComplete, error) {

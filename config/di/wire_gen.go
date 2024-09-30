@@ -27,7 +27,7 @@ func Init() *Initialization {
 	inventoryControllerImpl := controller.InventoryControllerInit(inventoryServiceImpl)
 	conn := config.ConnectToNatsBroker()
 	taskRepositoryImpl := repository.TaskRepositoryInit(db, conn)
-	taskServiceImpl := service.TaskServiceInit(taskRepositoryImpl, inventoryRepositoryImpl)
+	taskServiceImpl := service.TaskServiceInit(taskRepositoryImpl, inventoryRepositoryImpl, userRepositoryImpl, conn)
 	taskControllerImpl := controller.TaskControllerInit(taskServiceImpl)
 	middlewareServiceImpl := middlewares.MiddlewareServiceInit(userRepositoryImpl)
 	natsBrokerImpl := config.NatsBrokerInit(conn)

@@ -5,6 +5,7 @@ type Task string
 const (
 	FRIENDS   Task = "FRIENDS"
 	SUBSCRIBE Task = "SUBSCRIBE"
+	INVENTORY Task = "INVENTORY"
 )
 
 type TaskCompleteStatus string

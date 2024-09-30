@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+	"strconv"
+	"time"
 )
 
 type TaskService interface {
@@ -21,6 +24,8 @@ type TaskService interface {
 type TaskServiceImpl struct {
 	taskRepository      repository.TaskRepository
 	inventoryRepository repository.InventoryRepository
+	userRepository      repository.UserRepository
+	nc                  *nats.Conn
 }
 
 // Helper function to extract user from context
@@ -38,6 +43,51 @@ func statusToString(status dao.TaskComplete, err error) constant.TaskCompleteSta
 		return constant.TASK_COMPLETE_NULL
 	}
 	return status.Status
+}
+
+func (s *TaskServiceImpl) checkTask(task dao.Task, user dao.User) (bool, error) {
+	switch task.Type {
+	case constant.SUBSCRIBE:
+		channelId, _ := task.Data["id"].(string)
+		return s.checkTaskSubscribe(strconv.Itoa(int(user.TgId)), channelId)
+	case constant.FRIENDS:
+		return s.checkTaskFriend(user, task.NeedDoneTimes)
+	case constant.INVENTORY:
+		plant, _ := task.Data["item"].(string)
+		return s.checkTaskInventory(user, task.NeedDoneTimes, constant.Plant(plant))
+	default:
+		return false, nil
+	}
+}
+
+func (s *TaskServiceImpl) checkTaskSubscribe(userId string, channelId string) (bool, error) {
+	requestData := userId + "," + channelId
+	msg, err := s.nc.Request("check_subscribe", []byte(requestData), 10*time.Second)
+	if err != nil {
+		return false, err
+	}
+	return string(msg.Data) == "1", nil
+}
+
+func (s *TaskServiceImpl) checkTaskFriend(user dao.User, friendsRequired int) (bool, error) {
+	userReferrals, err := s.userRepository.GetMyReferrals(user.ID)
+	if err != nil {
+		return false, err
+	}
+	if len(userReferrals) >= friendsRequired {
+		return true, nil
+	}
+	return false, nil
+}
+func (s *TaskServiceImpl) checkTaskInventory(user dao.User, itemsRequired int, itemName constant.Plant) (bool, error) {
+	quantity, err := s.inventoryRepository.GetItemQuantity(user.ID, itemName)
+	if err != nil {
+		return false, err
+	}
+	if quantity >= itemsRequired {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
@@ -62,7 +112,7 @@ func (s *TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
 	if statusErr == nil {
 		return dtob.ConstructTaskByModel(task, statusToString(status, nil)), nil
 	}
-	checked, err := s.taskRepository.CheckTask(task, user)
+	checked, err := s.checkTask(task, user)
 	if err != nil || !checked {
 		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
@@ -97,7 +147,7 @@ func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
 		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
-	checked, err := s.taskRepository.CheckTask(task, user)
+	checked, err := s.checkTask(task, user)
 	if err != nil || !checked {
 		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
@@ -137,9 +187,13 @@ func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
 
 func TaskServiceInit(
 	taskRepository repository.TaskRepository,
-	inventoryRepository repository.InventoryRepository) *TaskServiceImpl {
+	inventoryRepository repository.InventoryRepository,
+	userRepository repository.UserRepository,
+	nc *nats.Conn) *TaskServiceImpl {
 	return &TaskServiceImpl{
 		taskRepository:      taskRepository,
 		inventoryRepository: inventoryRepository,
+		userRepository:      userRepository,
+		nc:                  nc,
 	}
 }

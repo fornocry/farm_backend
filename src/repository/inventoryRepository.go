@@ -11,6 +11,7 @@ import (
 type InventoryRepository interface {
 	GetAllInventoryItems(userId uuid.UUID) ([]dao.InventoryItem, error)
 	IncreaseItemQuantity(userId uuid.UUID, plant constant.Plant, amount int) error
+	GetItemQuantity(userId uuid.UUID, plant constant.Plant) (int, error)
 }
 
 type InventoryRepositoryImpl struct {
@@ -71,6 +72,14 @@ func (u InventoryRepositoryImpl) IncreaseItemQuantity(userId uuid.UUID, plant co
 	}
 
 	return nil
+}
+func (u InventoryRepositoryImpl) GetItemQuantity(userId uuid.UUID, plant constant.Plant) (int, error) {
+	var item dao.InventoryItem
+	err := u.db.Where("user_id = ? AND plant = ?", userId, plant).First(&item).Error
+	if err != nil {
+		return 0, err // Item not found or other error
+	}
+	return item.Quantity, nil
 }
 
 func InventoryRepositoryInit(db *gorm.DB) *InventoryRepositoryImpl {
