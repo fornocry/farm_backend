@@ -20,22 +20,46 @@ type MiddlewareServiceImpl struct {
 	userRepository repository.UserRepository
 }
 
-func (u MiddlewareServiceImpl) AuthMiddleware() gin.HandlerFunc {
+func (m MiddlewareServiceImpl) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		reqToken := c.Request.Header.Get("Authorization")
-		jwtSecretToken := strings.Split(reqToken, "Bearer ")[1]
-		token, err := pkg.VerifyJwtToken(jwtSecretToken)
-		if err != nil {
-			pkg.PanicException(constant.Unauthorized, "")
+		authHeader := c.GetHeader("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			pkg.PanicException(constant.Unauthorized, "Invalid authorization header")
+			return
 		}
-		userAuthId := token.Claims.(jwt.MapClaims)["user_auth_id"].(string)
-		userAuthIdUuid, err := uuid.Parse(userAuthId)
-		userAuth, err := u.userRepository.GetByAuthId(userAuthIdUuid)
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		token, err := pkg.VerifyJwtToken(tokenString)
 		if err != nil {
-			pkg.PanicException(constant.Unauthorized, "")
+			pkg.PanicException(constant.Unauthorized, "Invalid token")
+			return
 		}
-		user := userAuth.User
-		c.Set("user", user)
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			pkg.PanicException(constant.Unauthorized, "Invalid token claims")
+			return
+		}
+
+		userAuthIDStr, ok := claims["user_auth_id"].(string)
+		if !ok {
+			pkg.PanicException(constant.Unauthorized, "Invalid user_auth_id in token")
+			return
+		}
+
+		userAuthID, err := uuid.Parse(userAuthIDStr)
+		if err != nil {
+			pkg.PanicException(constant.Unauthorized, "Invalid user_auth_id format")
+			return
+		}
+
+		userAuth, err := m.userRepository.GetByAuthId(userAuthID)
+		if err != nil {
+			pkg.PanicException(constant.Unauthorized, "User not found")
+			return
+		}
+
+		c.Set("user", userAuth.User)
 		c.Set("user_auth", userAuth)
 		c.Next()
 	}
