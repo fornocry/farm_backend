@@ -4,6 +4,7 @@ import (
 	"crazyfarmbackend/src/constant"
 	"crazyfarmbackend/src/domain/dao"
 	"crazyfarmbackend/src/domain/dto"
+	"crazyfarmbackend/src/domain/dtob"
 	"crazyfarmbackend/src/pkg"
 	"crazyfarmbackend/src/repository"
 	"fmt"
@@ -29,21 +30,6 @@ func (s *TaskServiceImpl) getUserFromContext(c *gin.Context) (dao.User, error) {
 		return dao.User{}, fmt.Errorf("failed to get user from context")
 	}
 	return user, nil
-}
-
-// Helper function to construct a DTO from a model and status
-func constructTaskByModel(item dao.Task, status constant.TaskCompleteStatus) dto.Task {
-	return dto.Task{
-		ID:            item.ID,
-		Name:          item.Name,
-		Icon:          item.Icon,
-		Reward:        item.Reward,
-		RewardAmount:  item.RewardAmount,
-		NeedDoneTimes: item.NeedDoneTimes,
-		Type:          item.Type,
-		Data:          item.Data,
-		Status:        status,
-	}
 }
 
 // Helper function to convert status to string
@@ -74,15 +60,15 @@ func (s *TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
 	}
 	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if statusErr == nil {
-		return constructTaskByModel(task, statusToString(status, nil)), nil
+		return dtob.ConstructTaskByModel(task, statusToString(status, nil)), nil
 	}
 	checked, err := s.taskRepository.CheckTask(task, user)
 	if err != nil || !checked {
-		return constructTaskByModel(task, statusToString(status, statusErr)), nil
+		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	status, statusErr = s.taskRepository.MarkDone(user.ID, taskIdUUid)
-	return constructTaskByModel(task, statusToString(status, statusErr)), nil
+	return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
 func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
@@ -108,12 +94,12 @@ func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
 
 	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if status.Status == constant.TASK_COMPLETE_FINISHED {
-		return constructTaskByModel(task, statusToString(status, statusErr)), nil
+		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	checked, err := s.taskRepository.CheckTask(task, user)
 	if err != nil || !checked {
-		return constructTaskByModel(task, statusToString(status, statusErr)), nil
+		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	status, statusErr = s.taskRepository.MarkClaimed(user.ID, taskIdUUid)
@@ -126,7 +112,7 @@ func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
 		return dto.Task{}, fmt.Errorf("failed to give reward for task: %v", err)
 	}
 
-	return constructTaskByModel(task, statusToString(status, statusErr)), nil
+	return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
 func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
@@ -143,7 +129,7 @@ func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
 	var dtoItems []dto.Task
 	for _, item := range items {
 		status, err := s.taskRepository.GetStatus(user.ID, item.ID)
-		dtoItems = append(dtoItems, constructTaskByModel(item, statusToString(status, err)))
+		dtoItems = append(dtoItems, dtob.ConstructTaskByModel(item, statusToString(status, err)))
 	}
 
 	return dtoItems, nil
