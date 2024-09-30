@@ -3,6 +3,7 @@ package service
 import (
 	"crazyfarmbackend/src/domain/dao"
 	"crazyfarmbackend/src/domain/dto"
+	"crazyfarmbackend/src/domain/dtob"
 	"crazyfarmbackend/src/repository"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -16,12 +17,6 @@ type InventoryServiceImpl struct {
 	inventoryRepository repository.InventoryRepository
 }
 
-func constructInventoryItemByModel(item dao.InventoryItem) dto.InventoryItem {
-	return dto.InventoryItem{
-		Plant:    item.Plant,
-		Quantity: item.Quantity}
-}
-
 func (u InventoryServiceImpl) GetAllItems(c *gin.Context) (dto.GetAllItemsResponse, error) {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
@@ -33,7 +28,7 @@ func (u InventoryServiceImpl) GetAllItems(c *gin.Context) (dto.GetAllItemsRespon
 	}
 	var dtoItems []dto.InventoryItem
 	for _, item := range items {
-		dtoItems = append(dtoItems, constructInventoryItemByModel(item))
+		dtoItems = append(dtoItems, dtob.ConstructInventoryItemByModel(item))
 	}
 	response := dto.GetAllItemsResponse{
 		Items: dtoItems,
