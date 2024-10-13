@@ -25,8 +25,9 @@ type UserUpgrade struct {
 }
 
 type UserField struct {
-	FieldID int            `json:"FieldID"`
-	Plant   constant.Plant `json:"Plant"`
+	FieldID   int            `json:"FieldID"`
+	Plant     constant.Plant `json:"Plant"`
+	PlantTime int64          `json:"PlantTime"`
 }
 
 type UserReferral struct {

@@ -18,7 +18,6 @@ type UserRepository interface {
 	GetOrCreateAuth(data, method string) (dao.UserAuth, bool, error)
 	UpdateUserFields(userId uuid.UUID, updates map[string]interface{}) (dao.User, error)
 	GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, error)
-	GetMyFields(userId uuid.UUID) ([]dao.UserField, error)
 	GetMyReferrals(userId uuid.UUID) ([]dao.User, error)
 	SetReferrals(userId, referrerId uuid.UUID) (dao.UserReferral, error)
 }
@@ -127,14 +126,6 @@ func (u *UserRepositoryImpl) GetUserUpgrade(userId uuid.UUID) (dao.UserUpgrade, 
 	return userUpgrade, nil
 }
 
-func (u *UserRepositoryImpl) GetMyFields(userId uuid.UUID) ([]dao.UserField, error) {
-	var userFields []dao.UserField
-	if err := u.db.Where("user_id = ?", userId).Find(&userFields).Error; err != nil {
-		return nil, u.logAndReturnError("Error getting user fields: ", err)
-	}
-	return userFields, nil
-}
-
 func (u *UserRepositoryImpl) GetMyReferrals(userId uuid.UUID) ([]dao.User, error) {
 	var userReferrals []dao.UserReferral
 	if err := u.db.Where("referrer_id = ?", userId).Preload("Referral").Find(&userReferrals).Error; err != nil {
@@ -148,13 +139,21 @@ func (u *UserRepositoryImpl) GetMyReferrals(userId uuid.UUID) ([]dao.User, error
 }
 
 func (u *UserRepositoryImpl) SetReferrals(userId, referrerId uuid.UUID) (dao.UserReferral, error) {
-	userReferral := dao.UserReferral{ReferralId: userId, ReferrerID: referrerId}
+	// Initialize the UserReferral struct with provided userId and referrerId
+	userReferral := dao.UserReferral{
+		ReferralId: userId,
+		ReferrerID: referrerId,
+	}
+
+	// Save the userReferral to the database and handle any errors
 	if err := u.db.Save(&userReferral).Error; err != nil {
+		// Log the error and return it
 		return dao.UserReferral{}, u.logAndReturnError("Error creating user referral: ", err)
 	}
+
+	// Return the created userReferral
 	return userReferral, nil
 }
-
 func UserRepositoryInit(db *gorm.DB) *UserRepositoryImpl {
 	_ = db.AutoMigrate(&dao.User{}, &dao.UserAuth{}, &dao.UserUpgrade{}, &dao.UserField{}, &dao.UserReferral{})
 	return &UserRepositoryImpl{db: db}

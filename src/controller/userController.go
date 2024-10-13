@@ -11,7 +11,6 @@ type UserController interface {
 	AuthUser(ctx *gin.Context)
 	GetMe(ctx *gin.Context)
 	GetMyUpgrades(c *gin.Context)
-	GetMyFields(c *gin.Context)
 	GetMyReferrals(c *gin.Context)
 }
 
@@ -39,12 +38,6 @@ func (u UserControllerImpl) GetMe(c *gin.Context) {
 func (u UserControllerImpl) GetMyUpgrades(c *gin.Context) {
 	defer pkg.PanicHandler(c)
 	userResponse := u.userService.GetUserUpgrade(c)
-	c.JSON(http.StatusOK, userResponse)
-	return
-}
-func (u UserControllerImpl) GetMyFields(c *gin.Context) {
-	defer pkg.PanicHandler(c)
-	userResponse := u.userService.GetMyFields(c)
 	c.JSON(http.StatusOK, userResponse)
 	return
 }

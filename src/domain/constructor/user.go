@@ -1,4 +1,4 @@
-package dtob
+package constructor
 
 import (
 	"crazyfarmbackend/src/constant"
@@ -27,8 +27,9 @@ func ConstructUserUpgradeFromModel(userUpgrade dao.UserUpgrade) dto.UserUpgrade 
 
 func ConstructUserFieldFromModel(userField dao.UserField) dto.UserField {
 	return dto.UserField{
-		FieldID: userField.FieldID,
-		Plant:   userField.Plant,
+		FieldID:   userField.FieldID,
+		Plant:     userField.Plant,
+		PlantTime: userField.CreatedAt.Unix(),
 	}
 }
 

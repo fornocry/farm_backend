@@ -2,9 +2,9 @@ package service
 
 import (
 	"crazyfarmbackend/src/constant"
+	"crazyfarmbackend/src/domain/constructor"
 	"crazyfarmbackend/src/domain/dao"
 	"crazyfarmbackend/src/domain/dto"
-	"crazyfarmbackend/src/domain/dtob"
 	"crazyfarmbackend/src/pkg"
 	"crazyfarmbackend/src/repository"
 	"fmt"
@@ -110,15 +110,15 @@ func (s *TaskServiceImpl) Check(c *gin.Context) (dto.Task, error) {
 	}
 	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if statusErr == nil {
-		return dtob.ConstructTaskByModel(task, statusToString(status, nil)), nil
+		return constructor.ConstructTaskByModel(task, statusToString(status, nil)), nil
 	}
 	checked, err := s.checkTask(task, user)
 	if err != nil || !checked {
-		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
+		return constructor.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	status, statusErr = s.taskRepository.MarkDone(user.ID, taskIdUUid)
-	return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
+	return constructor.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
 func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
@@ -144,12 +144,12 @@ func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
 
 	status, statusErr := s.taskRepository.GetStatus(user.ID, task.ID)
 	if status.Status == constant.TASK_COMPLETE_FINISHED {
-		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
+		return constructor.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	checked, err := s.checkTask(task, user)
 	if err != nil || !checked {
-		return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
+		return constructor.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 	}
 
 	status, statusErr = s.taskRepository.MarkClaimed(user.ID, taskIdUUid)
@@ -157,12 +157,12 @@ func (s *TaskServiceImpl) Claim(c *gin.Context) (dto.Task, error) {
 		return dto.Task{}, fmt.Errorf("failed to mark task as claimed: %v", statusErr)
 	}
 
-	err = s.inventoryRepository.IncreaseItemQuantity(user.ID, task.Reward, task.RewardAmount)
+	err = s.inventoryRepository.AdjustItemQuantity(user.ID, task.Reward, task.RewardAmount)
 	if err != nil {
 		return dto.Task{}, fmt.Errorf("failed to give reward for task: %v", err)
 	}
 
-	return dtob.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
+	return constructor.ConstructTaskByModel(task, statusToString(status, statusErr)), nil
 }
 
 func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
@@ -179,7 +179,7 @@ func (s *TaskServiceImpl) GetAllTasks(c *gin.Context) ([]dto.Task, error) {
 	var dtoItems []dto.Task
 	for _, item := range items {
 		status, err := s.taskRepository.GetStatus(user.ID, item.ID)
-		dtoItems = append(dtoItems, dtob.ConstructTaskByModel(item, statusToString(status, err)))
+		dtoItems = append(dtoItems, constructor.ConstructTaskByModel(item, statusToString(status, err)))
 	}
 
 	return dtoItems, nil

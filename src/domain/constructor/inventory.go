@@ -1,4 +1,4 @@
-package dtob
+package constructor
 
 import (
 	"crazyfarmbackend/src/domain/dao"

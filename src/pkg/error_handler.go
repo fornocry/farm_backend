@@ -16,19 +16,19 @@ func PanicHandler(c *gin.Context) {
 		message := strArr[1]
 		switch key {
 		case constant.DataNotFound.GetResponseStatus():
-			c.JSON(http.StatusBadRequest, BuildResponse_(key, Null()))
+			c.JSON(http.StatusBadRequest, BuildResponse_(key, message))
 			c.Abort()
 		case constant.Unauthorized.GetResponseStatus():
-			c.JSON(http.StatusUnauthorized, BuildResponse_(key, Null()))
+			c.JSON(http.StatusUnauthorized, BuildResponse_(key, message))
 			c.Abort()
 		case constant.WrongDataBody.GetResponseStatus():
 			c.JSON(http.StatusBadRequest, BuildResponse_(key, message))
 			c.Abort()
 		case constant.WrongBody.GetResponseStatus():
-			c.JSON(http.StatusBadRequest, BuildResponse_(key, Null()))
+			c.JSON(http.StatusBadRequest, BuildResponse_(key, message))
 			c.Abort()
 		default:
-			c.JSON(http.StatusInternalServerError, BuildResponse_(key, Null()))
+			c.JSON(http.StatusInternalServerError, BuildResponse_(key, message))
 			c.Abort()
 		}
 	}

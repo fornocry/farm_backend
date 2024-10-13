@@ -2,9 +2,9 @@ package service
 
 import (
 	"crazyfarmbackend/src/constant"
+	"crazyfarmbackend/src/domain/constructor"
 	"crazyfarmbackend/src/domain/dao"
 	"crazyfarmbackend/src/domain/dto"
-	"crazyfarmbackend/src/domain/dtob"
 	"crazyfarmbackend/src/pkg"
 	"crazyfarmbackend/src/repository"
 	"github.com/gin-gonic/gin"
@@ -19,7 +19,6 @@ type UserService interface {
 	AuthUser(*gin.Context) (dto.UserAuthResponse, error)
 	GetMe(*gin.Context) dto.User
 	GetUserUpgrade(c *gin.Context) dto.UserUpgrade
-	GetMyFields(c *gin.Context) []dto.UserField
 	GetMyReferrals(c *gin.Context) []dto.UserReferral
 }
 
@@ -101,7 +100,7 @@ func (u *UserServiceImpl) AuthUserTelegram(data string) (dto.User, dao.UserAuth)
 	if isFirst {
 		u.handleReferral(telegramInitData.StartParam, user.ID)
 	}
-	return dtob.ConstructUserFromModel(user), userAuth
+	return constructor.ConstructUserFromModel(user), userAuth
 }
 
 func (u *UserServiceImpl) handleReferral(startParam string, userID uuid.UUID) {
@@ -117,9 +116,9 @@ func (u *UserServiceImpl) handleReferral(startParam string, userID uuid.UUID) {
 func (u *UserServiceImpl) GetMe(c *gin.Context) dto.User {
 	user, ok := c.MustGet("user").(dao.User)
 	if !ok {
-		pkg.PanicException(constant.DataNotFound, "")
+		pkg.PanicException(constant.DataNotFound, "User not found")
 	}
-	return dtob.ConstructUserFromModel(user)
+	return constructor.ConstructUserFromModel(user)
 }
 
 func (u *UserServiceImpl) GetUserUpgrade(c *gin.Context) dto.UserUpgrade {
@@ -132,26 +131,7 @@ func (u *UserServiceImpl) GetUserUpgrade(c *gin.Context) dto.UserUpgrade {
 	if err != nil {
 		pkg.PanicException(constant.DataNotFound, "")
 	}
-	return dtob.ConstructUserUpgradeFromModel(userUpgrade)
-}
-
-func (u *UserServiceImpl) GetMyFields(c *gin.Context) []dto.UserField {
-	user, ok := c.MustGet("user").(dao.User)
-	if !ok {
-		pkg.PanicException(constant.DataNotFound, "")
-	}
-
-	userFields, err := u.userRepository.GetMyFields(user.ID)
-	if err != nil {
-		pkg.PanicException(constant.DataNotFound, "")
-	}
-
-	userFieldDTOs := make([]dto.UserField, len(userFields))
-	for i, field := range userFields {
-		userFieldDTOs[i] = dtob.ConstructUserFieldFromModel(field)
-	}
-
-	return userFieldDTOs
+	return constructor.ConstructUserUpgradeFromModel(userUpgrade)
 }
 
 func (u *UserServiceImpl) GetMyReferrals(c *gin.Context) []dto.UserReferral {
@@ -167,7 +147,7 @@ func (u *UserServiceImpl) GetMyReferrals(c *gin.Context) []dto.UserReferral {
 
 	userReferralsDTOs := make([]dto.UserReferral, len(userReferrals))
 	for i, referral := range userReferrals {
-		userReferralsDTOs[i] = dtob.ConstructUserReferralFromModel(referral)
+		userReferralsDTOs[i] = constructor.ConstructUserReferralFromModel(referral)
 	}
 
 	return userReferralsDTOs
